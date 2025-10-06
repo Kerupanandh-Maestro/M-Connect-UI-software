@@ -1,14 +1,15 @@
 import sys
 import time
 import random
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QComboBox, QCompleter, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap, QFont
+import requests
 
 app = QApplication(sys.argv)
 main_window = QMainWindow()
 main_window.setWindowTitle("M-Connect")
-main_window.setFixedSize(720, 1280) 
+main_window.setMinimumSize(720, 1280) 
 stack = QStackedWidget()
 main_window.setCentralWidget(stack)
 
@@ -47,12 +48,140 @@ class ClickableIcon(QLabel):
     def mousePressEvent(self, event):
         stack.setCurrentIndex(self.index)  
 
-# Check Out DialogBox
+employee = []
+# machine_details
+token = "rIS8Ls675h7ksIV3YNjTEIDCqDOGjw"
+url = "https://mconnect.themaestro.in/client_mconnect/masters/list_machine_work?page=1&size=10"
 
-class QuantityDialog(QDialog):
+payload = {
+    "token": token,
+    "machineName": "",       
+    "machineGroupId": 230,
+    "machine_id": 0
+}
+
+try:
+    res = requests.post(url, data=payload, headers={"accept": "application/json"}, timeout=5)
+    if res.status_code == 200:
+        result = res.json()
+        for machine in result.get("data", {}).get("items", []):
+            if machine.get("employeeName"):
+                employee.append((machine.get("employeeCode"), machine.get("employeeName")))
+        # Sort by employee name
+        employee.sort(key=lambda x: x[1].lower())
+        print(employee)
+    else:
+        print("Failed to fetch machines. Status code:", res.status_code, res.text)
+except Exception as e:
+    print("Error loading machines:", e)
+
+
+def check_in():
+    dialog = CheckInDialog(employee)
+    if dialog.exec():
+        emp = dialog.get_selected_employee()
+        if emp:
+            print("Employee checked in: ", emp)
+            stack.setCurrentWidget(option)
+            check_in_btn.hide()
+            check_out_btn.show()
+            forward_btn.show()
+
+
+# Check IN DialogBox
+class CheckInDialog(QDialog):
+    def __init__(self, employees):
+        super().__init__()
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setMinimumSize(600, 500)
+        self.setStyleSheet("background-color: #1E1E1E; border-radius: 15px;")
+
+
+        layout = QVBoxLayout()
+        layout.setSpacing(50)
+        label = QLabel("Select Employee:")
+        label.setStyleSheet("font-size: 28px; color: white;")
+        layout.addWidget(label)
+        # ComboBox with search enabled
+        self.combo = QComboBox()
+        self.combo.setEditable(True)  # makes it a search box
+        self.combo.setFont(QFont("Arial", 25))
+        self.combo.setStyleSheet("""
+            QComboBox {
+                background-color: #2b2b2b;
+                color: #ffffff;
+                border: 2px solid #1E88E5;
+                border-radius: 10px;
+                padding: 10px;
+                font-size: 25px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3c3f41;
+                color: #ffffff;
+                selection-background-color: #1E88E5;
+                selection-color: white;
+            }
+        """)
+
+
+        layout.addWidget(self.combo)
+        layout.addSpacing(300)
+
+        self.combo.addItem(None, None)
+        # Add employees to combo box
+        for code, name in employees:
+            self.combo.addItem(name, code)
+
+        # Add completer for search filter
+        model = self.combo.model()
+        completer = QCompleter(model, self.combo)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.combo.setCompleter(completer)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancel")
+        for btn in [ok_btn, cancel_btn]:
+            btn.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+            btn.setMinimumSize(200, 80)
+
+        ok_btn.setStyleSheet("background-color: #1E88E5; color: white; border-radius: 15px;")
+        cancel_btn.setStyleSheet("background-color: #F44336; color: white; border-radius: 15px;")
+
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        self.setLayout(layout)
+
+        ok_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+
+    def get_selected_employee(self):
+        idx = self.combo.currentIndex()
+        if idx > 0:
+            return {
+                "id": self.combo.currentData(),
+                "name": self.combo.currentText()
+            }
+        return None
+
+def check_out():
+    dialog = CheckOutDialog()
+    if dialog.exec():
+        prod_qty, rej_qty = dialog.get_values()
+        print("Production Qty:", prod_qty)
+        print("Rejected Qty:", rej_qty)
+        check_out_btn.hide()
+        forward_btn.hide()
+        check_in_btn.show()
+
+# Check OUT DialogBox
+class CheckOutDialog(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Check Out")
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setMinimumSize(600, 500)
 
         layout = QVBoxLayout()
@@ -155,36 +284,34 @@ class QuantityDialog(QDialog):
     def get_values(self):
         return self.result_values
 
-    # warning box
-    def show_warning(parent, message):
-        msg_box = QMessageBox(parent)
-        msg_box.setWindowTitle("Warning")
-        msg_box.setText(message)
+# warning box
+def show_warning(parent, message):
+    msg_box = QMessageBox(parent)
+    msg_box.setWindowTitle("Warning")
+    msg_box.setText(message)
+    msg_box.setStyleSheet("""
+        QMessageBox {
+            background-color: lightgray;
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        QPushButton {
+            background-color: #1E88E5;
+            color: white;
+            font-size: 25px;
+            padding: 30px 60px;
+            border-radius: 15px;
+        }
+        QPushButton:hover {
+            background-color: #1565C0;
+        }
+        QPushButton:pressed {
+            background-color: #0D47A1;
+        }
+    """)
 
-        msg_box.setMinimumSize(400, 200)  
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: #333;
-                color: white;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            QPushButton {
-                background-color: #1E88E5;
-                color: white;
-                font-size: 20px;
-                padding: 10px 20px;
-                border-radius: 15px;
-            }
-            QPushButton:hover {
-                background-color: #1565C0;
-            }
-            QPushButton:pressed {
-                background-color: #0D47A1;
-            }
-        """)
-
-        msg_box.exec()
+    msg_box.exec()
 
 
 home = QWidget()
@@ -303,21 +430,6 @@ setting.setLayout(setting_layout)
 stack.addWidget(home)
 stack.addWidget(option)
 stack.addWidget(setting)
-
-def check_out():
-    dialog = QuantityDialog()
-    if dialog.exec():
-        prod_qty, rej_qty = dialog.get_values()
-        print("Production Qty:", prod_qty)
-        print("Rejected Qty:", rej_qty)
-        check_out_btn.hide()
-        forward_btn.hide()
-        check_in_btn.show()
-def check_in():
-    stack.setCurrentWidget(option)
-    check_in_btn.hide()
-    check_out_btn.show()
-    forward_btn.show()
 
 worker = Worker()
 worker.signal.connect(lambda states:print(states))
