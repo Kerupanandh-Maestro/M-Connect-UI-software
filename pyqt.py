@@ -1,10 +1,11 @@
 import sys
 import time
 import random
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QComboBox, QCompleter, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QComboBox, QCompleter,QFrame, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap, QFont
 import requests
+from datetime import datetime
 
 app = QApplication(sys.argv)
 main_window = QMainWindow()
@@ -48,7 +49,6 @@ class ClickableIcon(QLabel):
     def mousePressEvent(self, event):
         stack.setCurrentIndex(self.index)  
 
-employee = []
 # machine_details
 token = "rIS8Ls675h7ksIV3YNjTEIDCqDOGjw"
 url = "https://mconnect.themaestro.in/client_mconnect/masters/list_machine_work?page=1&size=10"
@@ -64,12 +64,10 @@ try:
     res = requests.post(url, data=payload, headers={"accept": "application/json"}, timeout=5)
     if res.status_code == 200:
         result = res.json()
-        for machine in result.get("data", {}).get("items", []):
-            if machine.get("employeeName"):
-                employee.append((machine.get("employeeCode"), machine.get("employeeName")))
+        machines = result.get("data", {}).get("items", [])
         # Sort by employee name
-        employee.sort(key=lambda x: x[1].lower())
-        print(employee)
+        machines.sort(key=lambda x: (x.get("employeeName") or "").lower())
+        print(machines)
     else:
         print("Failed to fetch machines. Status code:", res.status_code, res.text)
 except Exception as e:
@@ -77,33 +75,31 @@ except Exception as e:
 
 
 def check_in():
-    dialog = CheckInDialog(employee)
+    dialog = CheckInDialog(machines)
     if dialog.exec():
         emp = dialog.get_selected_employee()
         if emp:
-            print("Employee checked in: ", emp)
-            stack.setCurrentWidget(option)
+            print(f'Employee Name: {emp["name"]}, Employee ID: {emp["id"]}, CheckIN: {emp["check_in"]}')
+            stack.setCurrentWidget(main)
             check_in_btn.hide()
             check_out_btn.show()
             forward_btn.show()
 
-
 # Check IN DialogBox
 class CheckInDialog(QDialog):
-    def __init__(self, employees):
+    def __init__(self, machines):
         super().__init__()
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setMinimumSize(600, 500)
         self.setStyleSheet("background-color: #1E1E1E; border-radius: 15px;")
 
 
         layout = QVBoxLayout()
-        layout.setSpacing(50)
         label = QLabel("Select Employee:")
         label.setStyleSheet("font-size: 28px; color: white;")
+        layout.addSpacing(25)
         layout.addWidget(label)
-        # ComboBox with search enabled
-        self.combo = QComboBox()
+        self.combo = QComboBox()      # ComboBox with search enabled
         self.combo.setEditable(True)  # makes it a search box
         self.combo.setFont(QFont("Arial", 25))
         self.combo.setStyleSheet("""
@@ -123,35 +119,56 @@ class CheckInDialog(QDialog):
             }
         """)
 
-
+        layout.addSpacing(10)
         layout.addWidget(self.combo)
-        layout.addSpacing(300)
-
+        layout.addStretch(1)
         self.combo.addItem(None, None)
         # Add employees to combo box
-        for code, name in employees:
-            self.combo.addItem(name, code)
+        for i in machines:
+            if i['employeeName']:
+                display_text = f"{i['employeeName']} [{i['employeeID']}]"
+                self.combo.addItem(display_text, i["employeeID"])
 
-        # Add completer for search filter
-        model = self.combo.model()
-        completer = QCompleter(model, self.combo)
+        self.checkin_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Completer for filtering by name or id
+        completer = QCompleter([self.combo.itemText(i) for i in range(self.combo.count())])
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self.combo.setCompleter(completer)
 
         # Buttons
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(25)
         ok_btn = QPushButton("OK")
         cancel_btn = QPushButton("Cancel")
         for btn in [ok_btn, cancel_btn]:
             btn.setFont(QFont("Arial", 20, QFont.Weight.Bold))
             btn.setMinimumSize(200, 80)
 
-        ok_btn.setStyleSheet("background-color: #1E88E5; color: white; border-radius: 15px;")
-        cancel_btn.setStyleSheet("background-color: #F44336; color: white; border-radius: 15px;")
+        ok_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1E88E5;
+                border-radius: 10px;
+                color: white;
+            }
+            QPushButton:hover { background-color: #1565C0; }
+            QPushButton:pressed { background-color: #0D47A1; }
+        """)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F44336;
+                border-radius: 10px;
+                color: white;
+            }
+            QPushButton:hover { background-color: #D32F2F; }
+            QPushButton:pressed { background-color: #B71C1C; }
+        """)
 
         btn_layout.addWidget(ok_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
+        layout.addSpacing(20)
 
         self.setLayout(layout)
 
@@ -162,8 +179,9 @@ class CheckInDialog(QDialog):
         idx = self.combo.currentIndex()
         if idx > 0:
             return {
-                "id": self.combo.currentData(),
-                "name": self.combo.currentText()
+                "name": self.combo.currentText().split(" (")[0],
+                "id": self.combo.currentData(), 
+                "check_in": self.checkin_time
             }
         return None
 
@@ -177,21 +195,26 @@ def check_out():
         forward_btn.hide()
         check_in_btn.show()
 
-# Check OUT DialogBox
 class CheckOutDialog(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setMinimumSize(600, 500)
+        self.setStyleSheet("background-color: #1E1E1E; border-radius: 15px;")
 
         layout = QVBoxLayout()
-        layout.addSpacing(40)
+
+        # Form layout for inputs
         form_layout = QFormLayout()
+        form_layout.setSpacing(40)
+
         self.prod_input = QLineEdit()
         self.rej_input = QLineEdit()
-        
+
         for line_edit in [self.prod_input, self.rej_input]:
-            line_edit.setFont(QFont("Arial", 24))
+            line_edit.setFixedHeight(60) 
+            line_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            line_edit.setFont(QFont("Arial", 22))
             line_edit.setStyleSheet("""
                 QLineEdit {
                     border: 3px solid #1E88E5;
@@ -203,45 +226,40 @@ class CheckOutDialog(QDialog):
                     border: 3px solid #1565C0;
                 }
             """)
-        form_layout.setSpacing(40)
+
         prod_label = QLabel("Production Quantity :")
-        prod_label.setStyleSheet("font-size: 30px; color: white")
+        prod_label.setStyleSheet("font-size: 26px; color: white;")
         form_layout.addRow(prod_label, self.prod_input)
 
         rej_label = QLabel("Rejected Quantity :")
-        rej_label.setStyleSheet("font-size: 30px; color: white")
+        rej_label.setStyleSheet("font-size: 26px; color: white;")
         form_layout.addRow(rej_label, self.rej_input)
-
+        layout.addSpacing(25)
         layout.addLayout(form_layout)
-        layout.addSpacing(60)
-        
+        layout.addStretch(1)
+
         # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(25)
         ok_btn = QPushButton("OK")
         cancel_btn = QPushButton("Cancel")
         for btn in [ok_btn, cancel_btn]:
-            btn.setFont(QFont("Arial", 25, QFont.Weight.Bold))
-            btn.setMinimumSize(80, 80)
-            btn.setStyleSheet("""
-                QPushButton {
-                    color: white;
-                    border-radius: 40px;
-                }
-            """)
+            btn.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+            btn.setMinimumSize(200, 80)
 
         ok_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1E88E5;
-                border-radius: 30px;
+                border-radius: 10px;
                 color: white;
             }
             QPushButton:hover { background-color: #1565C0; }
             QPushButton:pressed { background-color: #0D47A1; }
         """)
-
         cancel_btn.setStyleSheet("""
             QPushButton {
                 background-color: #F44336;
-                border-radius: 30px;
+                border-radius: 10px;
                 color: white;
             }
             QPushButton:hover { background-color: #D32F2F; }
@@ -250,16 +268,15 @@ class CheckOutDialog(QDialog):
 
         ok_btn.clicked.connect(self.validate_inputs)
         cancel_btn.clicked.connect(self.reject)
-        
-        btn_layout = QVBoxLayout()
+
         btn_layout.addWidget(ok_btn)
-        btn_layout.addSpacing(40)
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
-        layout.addSpacing(40)
-        
+        layout.addSpacing(20)
+
         self.setLayout(layout)
         self.result_values = None
+
 
         # Shadow for dialog
         shadow = QGraphicsDropShadowEffect()
@@ -316,6 +333,22 @@ def show_warning(parent, message):
 
 home = QWidget()
 home_layout = QVBoxLayout()
+home.setStyleSheet("""
+    QWidget {
+        background-color: #121212;
+        color: #f0f0f0;
+        font-family: 'Segoe UI', 'Arial';
+    }
+    QLabel {
+        font-size: 20px;
+        color: #f0f0f0;
+    }
+    QLabel#sectionTitle {
+        font-size: 24px;
+        font-weight: bold;
+        color: #00bcd4;
+    }
+""")
 home_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 check_in_btn = QPushButton("Check In")
 check_in_btn.setMinimumSize(500,500)
@@ -357,7 +390,7 @@ check_out_btn.setStyleSheet("""
 btn_shadow(check_out_btn)
 check_out_btn.hide()
 
-forward_btn = ClickableIcon("/home/maestro/m-connect/frontward.png", 1)
+forward_btn = ClickableIcon("/home/maestro/m-connect/back.png", 1)
 forward_btn.hide()
 home_layout.addSpacing(340)
 home_layout.addWidget(check_in_btn, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -371,68 +404,169 @@ home.setLayout(home_layout)
 check_in_btn.clicked.connect (lambda: check_in())
 check_out_btn.clicked.connect(lambda: check_out())
 
-option = QWidget() 
-option_layout = QVBoxLayout()
-option_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-workorder_btn = QPushButton("Work Order")
-workorder_btn.setMinimumSize(600,300)
-workorder_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-workorder_btn.setStyleSheet("""
-QPushButton {
-    background-color: #FF9800;   /* Amber orange */
-    color: white;
-    font-size: 60px;
-    font-weight: bold;
-    border-radius: 85px;
-    padding: 20px 40px;
-    border: 3px solid #E65100;
-}
-QPushButton:hover { background-color: #FB8C00; }
-QPushButton:pressed { background-color: #EF6C00; }
+main = QWidget()
+main_layout = QVBoxLayout()
+
+# ===================== GLOBAL STYLES =====================
+main.setStyleSheet("""
+    QWidget {
+        background-color: #121212;
+        color: #f0f0f0;
+        font-family: 'Segoe UI', 'Arial';
+    }
+    QLabel {
+        font-size: 20px;
+        color: #f0f0f0;
+    }
+    QLabel#sectionTitle {
+        font-size: 24px;
+        font-weight: bold;
+        color: #00bcd4;
+    }
 """)
-btn_shadow(workorder_btn)
 
-downtime_btn = QPushButton("Down Time")
-downtime_btn.setMinimumSize(600,300)
-downtime_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-downtime_btn.setStyleSheet("""
-QPushButton {
-    background-color: #009688;   /* Teal green */
-    color: white;
-    font-size: 60px;
-    font-weight: bold;
-    border-radius: 85px;
-    padding: 20px 40px;
-    border: 3px solid #004D40;
-}
-QPushButton:hover { background-color: #00897B; }
-QPushButton:pressed { background-color: #00695C; }
+# ===================== PROFILE LAYOUT =====================
+main_layout.addSpacing(20)
+profile_layout = QHBoxLayout()
+profile_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+# Avatar
+avatar_layout = QVBoxLayout()
+avatar_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+avatar = QLabel()
+pixmap = QPixmap("/home/maestro/m-connect/avatar.png").scaled(
+    100, 100,
+    Qt.AspectRatioMode.KeepAspectRatio,
+    Qt.TransformationMode.SmoothTransformation
+)
+avatar.setPixmap(pixmap)
+avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+avatar.setStyleSheet("""
+    QLabel {
+        border-radius: 50px;
+        border: 3px solid #00bcd4;
+        background-color: #00bcd4;
+        padding: 5px;
+    }
 """)
-btn_shadow(downtime_btn)
+avatar_layout.addWidget(avatar)
+profile_layout.addLayout(avatar_layout)
 
-back_btn = ClickableIcon("/home/maestro/m-connect/backward.png", 0)
+# Employee info
+emp_layout = QVBoxLayout()
+emp_layout.setSpacing(20)
+emp_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-option_layout.addSpacing(200)
-option_layout.addWidget(workorder_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-option_layout.addSpacing(200)
-option_layout.addWidget(downtime_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-option_layout.addSpacing(400)
-option_layout.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignLeft)
-option_layout.addSpacing(50)
-option.setLayout(option_layout)
-workorder_btn.clicked.connect(lambda: stack.setCurrentWidget(setting))
-downtime_btn.clicked.connect(lambda: stack.setCurrentWidget(setting))
+checkin_label = QLabel(f"Check In: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+checkin_label.setStyleSheet("""
+    font-size: 25px;
+    font-weight: bold;
+    color: white;
+""")
+checkin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+emp_layout.addWidget(checkin_label)
 
-setting = QWidget()
-setting_layout = QVBoxLayout()
-setting.setLayout(setting_layout)
+emp_name = QLabel("Employee: Gopal")
+emp_name.setStyleSheet("""
+    font-size: 25px;
+    font-weight: bold;
+    color: white;
+""")
 
+
+emp_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+emp_layout.addWidget(emp_name)
+
+emp_id = QLabel("Emp ID: 20eea14")
+emp_id.setStyleSheet("""
+    font-size: 25px;
+    font-weight: bold;
+    color: white;
+""")
+emp_id.setAlignment(Qt.AlignmentFlag.AlignCenter)
+emp_layout.addWidget(emp_id)
+
+profile_layout.addLayout(emp_layout)
+
+# Checkout
+back_layout = QVBoxLayout()
+back_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+back_btn = ClickableIcon("/home/maestro/m-connect/checkout.png", 0)
+back_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+back_btn.setStyleSheet("""
+    QLabel {
+        background-color: #292929;
+        border-radius: 15px;
+        padding: 10px;
+    }
+    QLabel:hover {
+        background-color: #00bcd4;
+    }
+""")
+back_layout.addWidget(back_btn)
+
+checkout_label = QLabel("Check Out")
+checkout_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+checkout_label.setFont(QFont("Arial", 20))
+checkout_label.setStyleSheet("color: #00bcd4; font-weight: bold;")
+back_layout.addWidget(checkout_label)
+
+profile_layout.addLayout(back_layout)
+main_layout.addLayout(profile_layout)
+
+# ===================== MACHINE DATA =====================
+def create_block(element1, element2 = None):
+    block = QFrame()
+    block.setMinimumSize(250, 100)
+    block.setStyleSheet("""
+        QFrame {
+            background-color: #1e1e1e;
+            border-radius: 15px;
+        }
+        QLabel {
+            font-size: 25px;
+            font-weight: bold;
+            color: white;
+        }
+    """)
+    if element2:
+        layout = QHBoxLayout()
+        name_label = QLabel(element1)
+        code_label = QLabel(element2)
+        layout.addWidget(name_label)
+        layout.addWidget(code_label)
+
+    else:
+        layout = QVBoxLayout()
+        name_label = QLabel(element1)
+        layout.addWidget(name_label)
+    block.setLayout(layout)
+    return block
+
+# Create individual blocks
+work_block = create_block("Work Name: Plumbing", "Work Code: W5484")
+part_block = create_block("Part Name: Part", "Part Code: P5548")
+work_type_block = create_block("Work Type: QcPoduction")
+operation_block = create_block("Operation: Smoothing", "Operation Code: O5456")
+quantity_block = create_block("Target Quantity: 9999", "Produced Quantity: 5452")
+
+# Arrange blocks in a grid-like layout
+layout = QVBoxLayout()
+layout.addWidget(work_block)
+layout.addWidget(part_block)
+layout.addWidget(work_type_block)
+layout.addWidget(operation_block)
+layout.addWidget(quantity_block)
+
+main_layout.addLayout(layout)
+
+main.setLayout(main_layout)
 stack.addWidget(home)
-stack.addWidget(option)
-stack.addWidget(setting)
+stack.addWidget(main)
 
 worker = Worker()
-worker.signal.connect(lambda states:print(states))
+worker.signal.connect(lambda states: print(states))
 worker.start()
 
 main_window.show()
