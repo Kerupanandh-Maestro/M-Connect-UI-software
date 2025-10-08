@@ -1,7 +1,7 @@
 import sys
 import time
 import random
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QComboBox, QCompleter,QFrame, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,QGraphicsDropShadowEffect, QComboBox, QCompleter,QFrame,QProgressBar, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap, QFont
 import requests
@@ -82,7 +82,6 @@ def check_in():
             print(f'Employee Name: {emp["name"]}, Employee ID: {emp["id"]}, CheckIN: {emp["check_in"]}')
             stack.setCurrentWidget(main)
             check_in_btn.hide()
-            check_out_btn.show()
             forward_btn.show()
 
 # Check IN DialogBox
@@ -191,16 +190,12 @@ def check_out():
         prod_qty, rej_qty = dialog.get_values()
         print("Production Qty:", prod_qty)
         print("Rejected Qty:", rej_qty)
-        check_out_btn.hide()
-        forward_btn.hide()
-        check_in_btn.show()
+        stack.setCurrentWidget(home)
 
 class CheckOutDialog(QDialog):
     def __init__(self):
         super().__init__()
         # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setMinimumSize(600, 500)
-        self.setStyleSheet("background-color: #1E1E1E; border-radius: 15px;")
 
         layout = QVBoxLayout()
 
@@ -368,33 +363,10 @@ check_in_btn.setStyleSheet("""
 """)
 btn_shadow(check_in_btn)
 
-check_out_btn = QPushButton("Check Out")
-check_out_btn.setMinimumSize(500,500)
-check_out_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-check_out_btn.setStyleSheet("""
-    QPushButton {
-        background-color: #F44336;  
-        color: white;               
-        font-size: 50px;
-        font-weight: bold;
-        border-radius: 250px;     
-        border: 2px solid #0B3D91;
-    }
-    QPushButton:hover {
-        background-color: #D32F2F;  
-    }
-    QPushButton:pressed {
-        background-color: #B71C1C; 
-    }
-""")
-btn_shadow(check_out_btn)
-check_out_btn.hide()
-
 forward_btn = ClickableIcon("/home/maestro/m-connect/back.png", 1)
 forward_btn.hide()
 home_layout.addSpacing(340)
 home_layout.addWidget(check_in_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-home_layout.addWidget(check_out_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 home_layout.addSpacing(340)
 nav_layout = QHBoxLayout()
 nav_layout.addWidget(forward_btn, alignment=Qt.AlignmentFlag.AlignRight)
@@ -402,10 +374,10 @@ home_layout.addLayout(nav_layout)
 home_layout.addSpacing(50)
 home.setLayout(home_layout)
 check_in_btn.clicked.connect (lambda: check_in())
-check_out_btn.clicked.connect(lambda: check_out())
 
 main = QWidget()
 main_layout = QVBoxLayout()
+main_layout.setSpacing(20)
 
 # ===================== GLOBAL STYLES =====================
 main.setStyleSheet("""
@@ -426,6 +398,7 @@ main.setStyleSheet("""
 """)
 
 # ===================== PROFILE LAYOUT =====================
+
 main_layout.addSpacing(20)
 profile_layout = QHBoxLayout()
 profile_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -436,7 +409,7 @@ avatar_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
 avatar = QLabel()
 pixmap = QPixmap("/home/maestro/m-connect/avatar.png").scaled(
-    100, 100,
+    120, 120,
     Qt.AspectRatioMode.KeepAspectRatio,
     Qt.TransformationMode.SmoothTransformation
 )
@@ -444,7 +417,7 @@ avatar.setPixmap(pixmap)
 avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
 avatar.setStyleSheet("""
     QLabel {
-        border-radius: 50px;
+        border-radius: 60px;
         border: 3px solid #00bcd4;
         background-color: #00bcd4;
         padding: 5px;
@@ -458,7 +431,7 @@ emp_layout = QVBoxLayout()
 emp_layout.setSpacing(20)
 emp_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-checkin_label = QLabel(f"Check In: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+checkin_label = QLabel(f"Check In : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 checkin_label.setStyleSheet("""
     font-size: 25px;
     font-weight: bold;
@@ -467,7 +440,7 @@ checkin_label.setStyleSheet("""
 checkin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 emp_layout.addWidget(checkin_label)
 
-emp_name = QLabel("Employee: Gopal")
+emp_name = QLabel("Employee : Gopala Krishnan")
 emp_name.setStyleSheet("""
     font-size: 25px;
     font-weight: bold;
@@ -478,7 +451,7 @@ emp_name.setStyleSheet("""
 emp_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 emp_layout.addWidget(emp_name)
 
-emp_id = QLabel("Emp ID: 20eea14")
+emp_id = QLabel("Emp ID : 20eea14")
 emp_id.setStyleSheet("""
     font-size: 25px;
     font-weight: bold;
@@ -490,9 +463,23 @@ emp_layout.addWidget(emp_id)
 profile_layout.addLayout(emp_layout)
 
 # Checkout
+class ClickableIcon(QLabel):
+    clicked = pyqtSignal()  # define a custom signal
+
+    def __init__(self, pixmap_path, parent=None):
+        super().__init__(parent)
+        pixmap = QPixmap(pixmap_path)
+        self.setPixmap(pixmap)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)  # optional: hand cursor
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()  # emit the signal
+
 back_layout = QVBoxLayout()
 back_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-back_btn = ClickableIcon("/home/maestro/m-connect/checkout.png", 0)
+back_btn = ClickableIcon("/home/maestro/m-connect/checkout.png")
+back_btn.setFixedSize(100, 100)
 back_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
 back_btn.setStyleSheet("""
     QLabel {
@@ -504,63 +491,206 @@ back_btn.setStyleSheet("""
         background-color: #00bcd4;
     }
 """)
+back_btn.clicked.connect(lambda: check_out())
 back_layout.addWidget(back_btn)
 
 checkout_label = QLabel("Check Out")
 checkout_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-checkout_label.setFont(QFont("Arial", 20))
-checkout_label.setStyleSheet("color: #00bcd4; font-weight: bold;")
+checkout_label.setStyleSheet("font-size: 20px; color: #00bcd4; font-weight: bold; font-family: 'Segoe UI', 'Arial';")
 back_layout.addWidget(checkout_label)
 
 profile_layout.addLayout(back_layout)
 main_layout.addLayout(profile_layout)
 
-# ===================== MACHINE DATA =====================
+# ===================== MACHINE SEC DATA =====================
+
 def create_block(element1, element2 = None):
-    block = QFrame()
-    block.setMinimumSize(250, 100)
-    block.setStyleSheet("""
-        QFrame {
-            background-color: #1e1e1e;
-            border-radius: 15px;
-        }
-        QLabel {
-            font-size: 25px;
-            font-weight: bold;
-            color: white;
-        }
-    """)
-    if element2:
-        layout = QHBoxLayout()
-        name_label = QLabel(element1)
-        code_label = QLabel(element2)
-        layout.addWidget(name_label)
-        layout.addWidget(code_label)
+    layout = QHBoxLayout()
+    name_label = QLabel(element1)
+    code_label = QLabel(element2)
+    code_label.setAlignment(Qt.AlignmentFlag.AlignRight| Qt.AlignmentFlag.AlignCenter)
+    layout.addWidget(name_label)
+    layout.addWidget(code_label)
+    return layout
 
-    else:
-        layout = QVBoxLayout()
-        name_label = QLabel(element1)
-        layout.addWidget(name_label)
-    block.setLayout(layout)
-    return block
-
+block = QFrame()
+block.setMinimumSize(250, 100)
+block.setStyleSheet("""
+    QFrame {
+        background-color: #1e1e1e;
+        border-radius: 15px;
+    }
+    QLabel {
+        font-size: 25px;
+        font-weight: bold;
+        color: white;
+    }
+""")
 # Create individual blocks
-work_block = create_block("Work Name: Plumbing", "Work Code: W5484")
-part_block = create_block("Part Name: Part", "Part Code: P5548")
-work_type_block = create_block("Work Type: QcPoduction")
-operation_block = create_block("Operation: Smoothing", "Operation Code: O5456")
-quantity_block = create_block("Target Quantity: 9999", "Produced Quantity: 5452")
+work_layout = create_block("Work : Plumbing Automation", "Code : W5484")
+part_layout = create_block("Part : Part", "Code : P5548")
+work_type_layout = create_block("Work Type : QcPoduction")
+operation_layout = create_block("Operation : Smoothing", "Code : O5456")
 
 # Arrange blocks in a grid-like layout
-layout = QVBoxLayout()
-layout.addWidget(work_block)
-layout.addWidget(part_block)
-layout.addWidget(work_type_block)
-layout.addWidget(operation_block)
-layout.addWidget(quantity_block)
+block_layout = QVBoxLayout()
+block_layout.addLayout(work_layout)
+block_layout.addLayout(part_layout)
+block_layout.addLayout(operation_layout)
+block_layout.addLayout(work_type_layout)
 
-main_layout.addLayout(layout)
+block.setLayout(block_layout)
 
+main_layout.addWidget(block)
+
+# ===================== BUTTONS =====================
+
+option_layout = QHBoxLayout()
+option_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+option_layout.setSpacing(30) 
+
+button_style = """
+QPushButton {
+    color: white;
+    font-size: 40px;
+    font-weight: bold;
+    border-radius: 75px;
+    padding: 20px 40px;
+}
+QPushButton:hover {
+    opacity: 0.9;
+}
+QPushButton:pressed {
+    transform: scale(0.98);
+}
+"""
+
+# Work Order button
+workorder_btn = QPushButton("Work Order")
+workorder_btn.setMinimumSize(300, 150)
+workorder_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+workorder_btn.setStyleSheet(button_style + """
+    QPushButton {
+        background-color: #FF9800;  /* Amber orange */
+        border: 3px solid #E65100;
+    }
+    QPushButton:hover { background-color: #FB8C00; }
+    QPushButton:pressed { background-color: #EF6C00; }
+""")
+btn_shadow(workorder_btn)
+option_layout.addWidget(workorder_btn, stretch=1)
+
+# Down Time button
+downtime_btn = QPushButton("Down Time")
+downtime_btn.setMinimumSize(300, 150)
+downtime_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+downtime_btn.setStyleSheet(button_style + """
+    QPushButton {
+        background-color: #009688; /* Teal green */
+        border: 3px solid #004D40;
+    }
+    QPushButton:hover { background-color: #00897B; }
+    QPushButton:pressed { background-color: #00695C; }
+""")
+btn_shadow(downtime_btn)
+option_layout.addWidget(downtime_btn, stretch=1)
+
+main_layout.addLayout(option_layout)
+
+# ===================== PRODUCTION PROGRESS =====================
+
+qty_layout = QVBoxLayout()
+qty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+# Title
+title = QLabel("Production Progress")
+title.setStyleSheet("font-size: 25px; color: white; font-weight: bold;")
+title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+# Progress Bar
+progress = QProgressBar()
+progress.setMinimum(0)
+progress.setMaximum(99999)
+progress.setValue(45445)
+progress.setTextVisible(True)
+progress.setFormat("Quantity: %v / %m")
+progress.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+progress.setStyleSheet("""
+    QProgressBar {
+        border: 3px solid #333;
+        border-radius: 20px;
+        background-color: #1e1e1e;
+        text-align: center;
+        color: white;
+        font-size: 25px;
+        font-weight: bold;
+        padding: 10px;
+        height: 50px;
+    }
+    QProgressBar::chunk {
+        background-color: #00bcd4;
+        border-radius: 20px;
+    }
+""")
+
+qty_layout.addWidget(title)
+qty_layout.addSpacing(10)
+qty_layout.addWidget(progress)
+main_layout.addLayout(qty_layout)
+
+# ===================== MACHINE PRI DATA =====================
+
+status_layout = QHBoxLayout()
+status_layout.setSpacing(15)
+status_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+label = QLabel("Machine Status ")
+label.setStyleSheet("font-size: 25px; color: white; font-weight: bold;")
+colour =random.choice(["#00FF00", "#FFEB3B", "#FF0000"])
+status = QLabel()
+status.setFixedSize(40, 40)
+status.setStyleSheet(f"""
+    background-color: {colour}; 
+    border-radius: 20px;       
+""")
+
+# Glow effect
+glow = QGraphicsDropShadowEffect()
+glow.setBlurRadius(40)
+glow.setColor(QColor(colour))
+glow.setOffset(0)
+status.setGraphicsEffect(glow)
+status_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignLeft)
+status_layout.addWidget(status, alignment=Qt.AlignmentFlag.AlignLeft)
+status_layout.addStretch(1)
+# duration block
+duration_block = QFrame()
+duration_block.setMinimumSize(250, 100)
+duration_block.setStyleSheet("""
+    QFrame {
+        background-color: #1e1e1e;
+        border-radius: 15px;
+    }
+    QLabel {
+        font-size: 25px;
+        font-weight: bold;
+        color: white;
+    }
+""")
+duration_layout = QVBoxLayout()
+duration_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+run = QLabel("Total Running : 4668454684")
+ideal = QLabel("Total Ideal : 874584156")
+downtime = QLabel("Total Downtime : 56464156485")
+duration_layout.addWidget(run)
+duration_layout.addWidget(ideal)
+duration_layout.addWidget(downtime)
+duration_block.setLayout(duration_layout)
+status_layout.addWidget(duration_block)
+main_layout.addLayout(status_layout)
+
+main_layout.addSpacing(10)
 main.setLayout(main_layout)
 stack.addWidget(home)
 stack.addWidget(main)
