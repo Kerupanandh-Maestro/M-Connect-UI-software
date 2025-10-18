@@ -1,332 +1,27 @@
 import sys
-import time
 import random
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,QGraphicsDropShadowEffect, QComboBox, QCompleter,QFrame,QProgressBar, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QColor, QIcon, QPixmap, QFont
-import requests
-from datetime import datetime
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,QGraphicsDropShadowEffect, QComboBox, QCompleter,QFrame,QProgressBar, QVBoxLayout,QHBoxLayout, QPushButton, QStackedWidget, QGraphicsDropShadowEffect, QSizePolicy, QLabel)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QPixmap, QFont
+from utility import*
+from core.config import settings
 
+#__________GLOBALS__________
+#__________APP__________
 app = QApplication(sys.argv)
-main_window = QMainWindow()
-main_window.setWindowTitle("M-Connect")
-main_window.setMinimumSize(720, 1280) 
+window = QMainWindow()
+window.setWindowTitle("M-Connect")
+window.setFixedSize(800, 1000) 
 stack = QStackedWidget()
-main_window.setCentralWidget(stack)
+window.setCentralWidget(stack)
 
-# Worker thread
-class Worker(QThread):
-    signal = pyqtSignal(dict)
-    def run(self):
-        pins = [1,2,3,4,5,6,7]
-        states = {p:0 for p in pins}
-        while True:
-            for p in pins:
-                new_state = random.choice([0,1])
-                if new_state!=states[p]:
-                    states[p]=new_state
-            self.signal.emit(states)
-            time.sleep(30)
-
-# Button Shadow
-def btn_shadow(btn):
-    shadow = QGraphicsDropShadowEffect()
-    shadow.setBlurRadius(30)
-    shadow.setXOffset(4)
-    shadow.setYOffset(4)
-    shadow.setColor(QColor(0,0,0,160))
-    btn.setGraphicsEffect(shadow)
-
-# Arrow Navigation 
-class ClickableIcon(QLabel):
-    def __init__(self, path, index):
-        super().__init__()
-        self.index = index 
-        pixmap = QPixmap(path)
-        self.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio))
-        self.setStyleSheet("cursor: pointer;")
-
-    def mousePressEvent(self, event):
-        stack.setCurrentIndex(self.index)  
-
-# machine_details
-token = "rIS8Ls675h7ksIV3YNjTEIDCqDOGjw"
-url = "https://mconnect.themaestro.in/client_mconnect/masters/list_machine_work?page=1&size=10"
-
-payload = {
-    "token": token,
-    "machineName": "",       
-    "machineGroupId": 230,
-    "machine_id": 0
-}
-
-try:
-    res = requests.post(url, data=payload, headers={"accept": "application/json"}, timeout=5)
-    if res.status_code == 200:
-        result = res.json()
-        machines = result.get("data", {}).get("items", [])
-        # Sort by employee name
-        machines.sort(key=lambda x: (x.get("employeeName") or "").lower())
-        print(machines)
-    else:
-        print("Failed to fetch machines. Status code:", res.status_code, res.text)
-except Exception as e:
-    print("Error loading machines:", e)
-
-
-def check_in():
-    dialog = CheckInDialog(machines)
-    if dialog.exec():
-        emp = dialog.get_selected_employee()
-        if emp:
-            print(f'Employee Name: {emp["name"]}, Employee ID: {emp["id"]}, CheckIN: {emp["check_in"]}')
-            stack.setCurrentWidget(main)
-            check_in_btn.hide()
-            forward_btn.show()
-
-# Check IN DialogBox
-class CheckInDialog(QDialog):
-    def __init__(self, machines):
-        super().__init__()
-        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setMinimumSize(600, 500)
-        self.setStyleSheet("background-color: #1E1E1E; border-radius: 15px;")
-
-
-        layout = QVBoxLayout()
-        label = QLabel("Select Employee:")
-        label.setStyleSheet("font-size: 28px; color: white;")
-        layout.addSpacing(25)
-        layout.addWidget(label)
-        self.combo = QComboBox()      # ComboBox with search enabled
-        self.combo.setEditable(True)  # makes it a search box
-        self.combo.setFont(QFont("Arial", 25))
-        self.combo.setStyleSheet("""
-            QComboBox {
-                background-color: #2b2b2b;
-                color: #ffffff;
-                border: 2px solid #1E88E5;
-                border-radius: 10px;
-                padding: 10px;
-                font-size: 25px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #3c3f41;
-                color: #ffffff;
-                selection-background-color: #1E88E5;
-                selection-color: white;
-            }
-        """)
-
-        layout.addSpacing(10)
-        layout.addWidget(self.combo)
-        layout.addStretch(1)
-        self.combo.addItem(None, None)
-        # Add employees to combo box
-        for i in machines:
-            if i['employeeName']:
-                display_text = f"{i['employeeName']} [{i['employeeID']}]"
-                self.combo.addItem(display_text, i["employeeID"])
-
-        self.checkin_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # Completer for filtering by name or id
-        completer = QCompleter([self.combo.itemText(i) for i in range(self.combo.count())])
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        self.combo.setCompleter(completer)
-
-        # Buttons
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(25)
-        ok_btn = QPushButton("OK")
-        cancel_btn = QPushButton("Cancel")
-        for btn in [ok_btn, cancel_btn]:
-            btn.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-            btn.setMinimumSize(200, 80)
-
-        ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1E88E5;
-                border-radius: 10px;
-                color: white;
-            }
-            QPushButton:hover { background-color: #1565C0; }
-            QPushButton:pressed { background-color: #0D47A1; }
-        """)
-        cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #F44336;
-                border-radius: 10px;
-                color: white;
-            }
-            QPushButton:hover { background-color: #D32F2F; }
-            QPushButton:pressed { background-color: #B71C1C; }
-        """)
-
-        btn_layout.addWidget(ok_btn)
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-        layout.addSpacing(20)
-
-        self.setLayout(layout)
-
-        ok_btn.clicked.connect(self.accept)
-        cancel_btn.clicked.connect(self.reject)
-
-    def get_selected_employee(self):
-        idx = self.combo.currentIndex()
-        if idx > 0:
-            return {
-                "name": self.combo.currentText().split(" (")[0],
-                "id": self.combo.currentData(), 
-                "check_in": self.checkin_time
-            }
-        return None
-
-def check_out():
-    dialog = CheckOutDialog()
-    if dialog.exec():
-        prod_qty, rej_qty = dialog.get_values()
-        print("Production Qty:", prod_qty)
-        print("Rejected Qty:", rej_qty)
-        stack.setCurrentWidget(home)
-
-class CheckOutDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-
-        layout = QVBoxLayout()
-
-        # Form layout for inputs
-        form_layout = QFormLayout()
-        form_layout.setSpacing(40)
-
-        self.prod_input = QLineEdit()
-        self.rej_input = QLineEdit()
-
-        for line_edit in [self.prod_input, self.rej_input]:
-            line_edit.setFixedHeight(60) 
-            line_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            line_edit.setFont(QFont("Arial", 22))
-            line_edit.setStyleSheet("""
-                QLineEdit {
-                    border: 3px solid #1E88E5;
-                    border-radius: 15px;
-                    padding: 10px;
-                    background-color: white;
-                }
-                QLineEdit:focus {
-                    border: 3px solid #1565C0;
-                }
-            """)
-
-        prod_label = QLabel("Production Quantity :")
-        prod_label.setStyleSheet("font-size: 26px; color: white;")
-        form_layout.addRow(prod_label, self.prod_input)
-
-        rej_label = QLabel("Rejected Quantity :")
-        rej_label.setStyleSheet("font-size: 26px; color: white;")
-        form_layout.addRow(rej_label, self.rej_input)
-        layout.addSpacing(25)
-        layout.addLayout(form_layout)
-        layout.addStretch(1)
-
-        # Buttons
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(25)
-        ok_btn = QPushButton("OK")
-        cancel_btn = QPushButton("Cancel")
-        for btn in [ok_btn, cancel_btn]:
-            btn.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-            btn.setMinimumSize(200, 80)
-
-        ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1E88E5;
-                border-radius: 10px;
-                color: white;
-            }
-            QPushButton:hover { background-color: #1565C0; }
-            QPushButton:pressed { background-color: #0D47A1; }
-        """)
-        cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #F44336;
-                border-radius: 10px;
-                color: white;
-            }
-            QPushButton:hover { background-color: #D32F2F; }
-            QPushButton:pressed { background-color: #B71C1C; }
-        """)
-
-        ok_btn.clicked.connect(self.validate_inputs)
-        cancel_btn.clicked.connect(self.reject)
-
-        btn_layout.addWidget(ok_btn)
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-        layout.addSpacing(20)
-
-        self.setLayout(layout)
-        self.result_values = None
-
-
-        # Shadow for dialog
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(25)
-        shadow.setXOffset(0)
-        shadow.setYOffset(0)
-        shadow.setColor(QColor(0, 0, 0, 150))
-        self.setGraphicsEffect(shadow)
-
-    def validate_inputs(self):
-        prod = self.prod_input.text().strip()
-        rej = self.rej_input.text().strip()
-        if not prod or not rej:
-            show_warning(main_window, "Missing Input, Both fields are required!")
-            return
-        if not prod.isdigit() or not rej.isdigit():
-            show_warning(main_window, "Invalid Input, Enter numeric values only!")
-            return
-        self.result_values = (int(prod), int(rej))
-        self.accept()
-
-    def get_values(self):
-        return self.result_values
-
-# warning box
-def show_warning(parent, message):
-    msg_box = QMessageBox(parent)
-    msg_box.setWindowTitle("Warning")
-    msg_box.setText(message)
-    msg_box.setStyleSheet("""
-        QMessageBox {
-            background-color: lightgray;
-            color: white;
-            font-size: 28px;
-            font-weight: bold;
-        }
-        QPushButton {
-            background-color: #1E88E5;
-            color: white;
-            font-size: 25px;
-            padding: 30px 60px;
-            border-radius: 15px;
-        }
-        QPushButton:hover {
-            background-color: #1565C0;
-        }
-        QPushButton:pressed {
-            background-color: #0D47A1;
-        }
-    """)
-
-    msg_box.exec()
-
-
+#__________1.HOME PAGE__________
 home = QWidget()
+
+machine = check_machine(home)
+# work_order_activity = True if machine['workName'] else False
+work_order_activity = False
+
 home_layout = QVBoxLayout()
 home.setStyleSheet("""
     QWidget {
@@ -344,37 +39,98 @@ home.setStyleSheet("""
         color: #00bcd4;
     }
 """)
-home_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-check_in_btn = QPushButton("Check In")
-check_in_btn.setMinimumSize(500,500)
-check_in_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-check_in_btn.setStyleSheet("""
-    QPushButton {
-        background-color: #1E88E5;
-        color: white;
-        font-size: 50px;
-        font-weight: bold;
-        border-radius: 250px;
-        border: 2px solid #9C2700;
-
-    }
-    QPushButton:hover { background-color: #1565C0; }
-    QPushButton:pressed { background-color: #0D47A1; }
-""")
-btn_shadow(check_in_btn)
-
-forward_btn = ClickableIcon("/home/maestro/m-connect/back.png", 1)
-forward_btn.hide()
-home_layout.addSpacing(340)
-home_layout.addWidget(check_in_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-home_layout.addSpacing(340)
-nav_layout = QHBoxLayout()
-nav_layout.addWidget(forward_btn, alignment=Qt.AlignmentFlag.AlignRight)
-home_layout.addLayout(nav_layout)
+# home_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+home_layout.setSpacing(0)
+home_layout.setContentsMargins(50, 20, 50, 20)
+date_time_label = QLabel()
+date_time_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+date_time_label.setStyleSheet("font-size: 25px; color: white;")
+timer = QTimer()
+timer.timeout.connect(lambda:date_time(date_time_label))
+timer.start(1000)
+home_layout.addWidget(date_time_label)
 home_layout.addSpacing(50)
-home.setLayout(home_layout)
-check_in_btn.clicked.connect (lambda: check_in())
+mac_block = QFrame()
+mac_block.setMinimumSize(100, 100)
+mac_block.setStyleSheet("""
+    QFrame {
+        background-color: #1e1e1e;
+        border-radius: 15px;
+    }
+    QLabel {
+        font-size: 25px;
+        font-weight: bold;
+        color: white;
+    }
+""")
+mac_layout = QVBoxLayout()
+mac_layout.setSpacing(20)
+        
+machine_label = QLabel(f"Machine       :  {machine['machineName']}")
+machine_code = QLabel(f"Machine Code  :  {machine['machineNumber']}")
+device_code = QLabel(f"Device Code   :  {settings.DEVICE_CODE}")
+mac_layout.addWidget(machine_label)
+mac_layout.addWidget(machine_code)
+mac_layout.addWidget(device_code)
+mac_block.setLayout(mac_layout)
+home_layout.addWidget(mac_block)
+home_layout.addSpacing(50)
+title = QLabel("Employee Check-In")
+title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+title.setStyleSheet("font-size: 60px; color: white; font-weight: bold;")
+home_layout.addWidget(title)
+home_layout.addSpacing(75)
 
+# --- Search Label ---
+label = QLabel("Select Employee :")
+label.setStyleSheet("font-size: 35px; color: white;")
+home_layout.addWidget(label)
+home_layout.addSpacing(10)
+
+# --- Search Box ---
+emp_combo = QComboBox()
+emp_combo.setEditable(True)
+emp_combo.setFont(QFont("Arial", 28))
+emp_combo.setStyleSheet("""
+    QComboBox {
+        background-color: #2b2b2b;
+        color: #ffffff;
+        border: 2px solid #1E88E5;
+        border-radius: 12px;
+        padding: 15px;
+        font-size: 28px;
+    }
+    QComboBox QAbstractItemView {
+        background-color: #3c3f41;
+        color: #ffffff;
+        selection-background-color: #1E88E5;
+        selection-color: white;
+    }
+""")
+emp_combo.addItem(None, None)
+emp_combo.addItem(f"{machine['EmployeeName']} [{machine['EmployeeCode']}]", machine["EmployeeCode"])
+
+# Autocomplete
+completer = QCompleter([emp_combo.itemText(i) for i in range(emp_combo.count())])
+completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+completer.setFilterMode(Qt.MatchFlag.MatchContains)
+emp_combo.setCompleter(completer)
+home_layout.addWidget(emp_combo)
+home_layout.addSpacing(50)
+
+# --- Check-In Button ---
+checkin_btn = ClickableIcon(f"{cur_directory}/asserts/checkin.png", s1=250, s2=250, callback=lambda: handle_checkin(emp_combo, window, stack, main, work_start_time, emp_name, emp_code))
+checkin_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+checkin_label = QLabel("Check In")
+checkin_label.setStyleSheet("font-size: 40px; color: #00bcd4; font-weight: bold; font-family: 'Segoe UI', 'Arial';")
+checkin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+home_layout.addWidget(checkin_btn)
+home_layout.addSpacing(10)
+home_layout.addWidget(checkin_label)
+# home_layout.addSpacing(300)
+home.setLayout(home_layout)
+
+#__________2.MAIN PAGE__________
 main = QWidget()
 main_layout = QVBoxLayout()
 main_layout.setSpacing(20)
@@ -408,7 +164,7 @@ avatar_layout = QVBoxLayout()
 avatar_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
 avatar = QLabel()
-pixmap = QPixmap("/home/maestro/m-connect/avatar.png").scaled(
+pixmap = QPixmap(f"{cur_directory}/asserts/avatar.png").scaled(
     120, 120,
     Qt.AspectRatioMode.KeepAspectRatio,
     Qt.TransformationMode.SmoothTransformation
@@ -426,128 +182,157 @@ avatar.setStyleSheet("""
 avatar_layout.addWidget(avatar)
 profile_layout.addLayout(avatar_layout)
 
-# Employee info
+# Employee Info
 emp_layout = QVBoxLayout()
 emp_layout.setSpacing(20)
 emp_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-checkin_label = QLabel(f"Check In : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-checkin_label.setStyleSheet("""
+work_start_time = QLabel()
+work_start_time.setStyleSheet("""
     font-size: 25px;
     font-weight: bold;
     color: white;
 """)
-checkin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-emp_layout.addWidget(checkin_label)
+work_start_time.setAlignment(Qt.AlignmentFlag.AlignCenter)
+emp_layout.addWidget(work_start_time)
 
-emp_name = QLabel("Employee : Gopala Krishnan")
+emp_name = QLabel()
 emp_name.setStyleSheet("""
     font-size: 25px;
     font-weight: bold;
     color: white;
 """)
-
-
 emp_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 emp_layout.addWidget(emp_name)
 
-emp_id = QLabel("Emp ID : 20eea14")
-emp_id.setStyleSheet("""
+emp_code = QLabel()
+emp_code.setStyleSheet("""
     font-size: 25px;
     font-weight: bold;
     color: white;
 """)
-emp_id.setAlignment(Qt.AlignmentFlag.AlignCenter)
-emp_layout.addWidget(emp_id)
+emp_code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+emp_layout.addWidget(emp_code)
 
 profile_layout.addLayout(emp_layout)
 
-# Checkout
-class ClickableIcon(QLabel):
-    clicked = pyqtSignal()  # define a custom signal
-
-    def __init__(self, pixmap_path, parent=None):
-        super().__init__(parent)
-        pixmap = QPixmap(pixmap_path)
-        self.setPixmap(pixmap)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)  # optional: hand cursor
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit()  # emit the signal
-
-back_layout = QVBoxLayout()
-back_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-back_btn = ClickableIcon("/home/maestro/m-connect/checkout.png")
-back_btn.setFixedSize(100, 100)
-back_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
-back_btn.setStyleSheet("""
+#Check Out
+checkout_layout = QVBoxLayout()
+checkout_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+checkout_btn = ClickableIcon(f"{cur_directory}/asserts/checkout.png", s1=100, s2=100, callback=lambda: checkout_quantity_box(emp_combo, stack, home, window))
+checkout_btn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+checkout_btn.setStyleSheet("""
     QLabel {
         background-color: #292929;
-        border-radius: 15px;
+        border-radius: 15px; 
         padding: 10px;
     }
     QLabel:hover {
         background-color: #00bcd4;
     }
 """)
-back_btn.clicked.connect(lambda: check_out())
-back_layout.addWidget(back_btn)
+checkout_layout.addWidget(checkout_btn)
 
 checkout_label = QLabel("Check Out")
 checkout_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 checkout_label.setStyleSheet("font-size: 20px; color: #00bcd4; font-weight: bold; font-family: 'Segoe UI', 'Arial';")
-back_layout.addWidget(checkout_label)
+checkout_layout.addWidget(checkout_label)
 
-profile_layout.addLayout(back_layout)
+profile_layout.addLayout(checkout_layout)
 main_layout.addLayout(profile_layout)
+# main_layout.addSpacing(25)
+    
+# MACHINE SECONDARY DATA
 
-# ===================== MACHINE SEC DATA =====================
+# Work Order Selection MAIN
+workorders = get_work_order()
+work_order_widget = QWidget()
+work_order_layout = QVBoxLayout(work_order_widget)
+work_order_layout.setSpacing(0)
+# work_order_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+work_order_layout.addSpacing(55)
+work_order_layout.setContentsMargins(50, 20, 50, 20)
 
-def create_block(element1, element2 = None):
-    layout = QHBoxLayout()
-    name_label = QLabel(element1)
-    code_label = QLabel(element2)
-    code_label.setAlignment(Qt.AlignmentFlag.AlignRight| Qt.AlignmentFlag.AlignCenter)
-    layout.addWidget(name_label)
-    layout.addWidget(code_label)
-    return layout
+# --- Work Order Search Label ---
+workorder_label = QLabel("Work Order :")
+workorder_label.setStyleSheet("font-size: 35px; color: white;")
+work_order_layout.addWidget(workorder_label)
+work_order_layout.addSpacing(10)
 
-block = QFrame()
-block.setMinimumSize(250, 100)
-block.setStyleSheet("""
-    QFrame {
-        background-color: #1e1e1e;
-        border-radius: 15px;
-    }
-    QLabel {
-        font-size: 25px;
+# --- Work Order Search Box ---
+workorder_combo = QComboBox()
+workorder_combo.setEditable(True)
+workorder_combo.setFont(QFont("Arial", 28))
+workorder_combo.setStyleSheet("""
+    QComboBox {
+        background-color: #2b2b2b;
+        color: #ffffff;
+        border: 2px solid #1E88E5;
+        border-radius: 12px;
+        padding: 15px;
+        font-size: 28px;
         font-weight: bold;
-        color: white;
+    }
+    QComboBox QAbstractItemView {
+        background-color: #3c3f41;
+        color: #ffffff;
+        selection-background-color: #1E88E5;
+        selection-color: white;
     }
 """)
-# Create individual blocks
-work_layout = create_block("Work : Plumbing Automation", "Code : W5484")
-part_layout = create_block("Part : Part", "Code : P5548")
-work_type_layout = create_block("Work Type : QcPoduction")
-operation_layout = create_block("Operation : Smoothing", "Code : O5456")
+workorder_combo.addItem(None, None)
+for workorder in workorders:
+    workorder_combo.addItem(f"{workorder['work_name']} [{workorder['work_id']}]", workorder["work_id"])
 
-# Arrange blocks in a grid-like layout
-block_layout = QVBoxLayout()
-block_layout.addLayout(work_layout)
-block_layout.addLayout(part_layout)
-block_layout.addLayout(operation_layout)
-block_layout.addLayout(work_type_layout)
+# Work Order Autocomplete
+completer = QCompleter([workorder_combo.itemText(i) for i in range(workorder_combo.count())])
+completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+completer.setFilterMode(Qt.MatchFlag.MatchContains)
+workorder_combo.setCompleter(completer)
+work_order_layout.addWidget(workorder_combo)
+work_order_layout.addSpacing(50)
 
-block.setLayout(block_layout)
+selected_workorder = workorder_combo.currentText()
 
-main_layout.addWidget(block)
+# --- Operation Search Label ---
+operation_label = QLabel("Operation :")
+operation_label.hide()
+operation_label.setStyleSheet("font-size: 35px; color: white;")
+work_order_layout.addWidget(operation_label)
+work_order_layout.addSpacing(10)
 
-# ===================== BUTTONS =====================
+# --- Operation Search Box ---
+operation_combo = QComboBox()
+operation_combo.hide()
+operation_combo.setEditable(True)
+operation_combo.setFont(QFont("Arial", 28))
+operation_combo.setStyleSheet("""
+    QComboBox {
+        background-color: #2b2b2b;
+        color: #ffffff;
+        border: 2px solid #1E88E5;
+        border-radius: 12px;
+        padding: 15px;
+        font-size: 28px;
+        font-weight: bold;
+    }
+    QComboBox QAbstractItemView {
+        background-color: #3c3f41;
+        color: #ffffff;
+        selection-background-color: #1E88E5;
+        selection-color: white;
+    }
+""")
 
-option_layout = QHBoxLayout()
-option_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-option_layout.setSpacing(30) 
+# Operation Autocomplete
+completer = QCompleter([operation_combo.itemText(i) for i in range(operation_combo.count())])
+completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+completer.setFilterMode(Qt.MatchFlag.MatchContains)
+operation_combo.setCompleter(completer)
+work_order_layout.addWidget(operation_combo)
+work_order_layout.addSpacing(100)
+
+workorder_combo.currentTextChanged.connect(lambda:update_operation(workorder_btn,operation_combo, workorder_combo, operation_label))
 
 button_style = """
 QPushButton {
@@ -566,10 +351,86 @@ QPushButton:pressed {
 """
 
 # Work Order button
-workorder_btn = QPushButton("Work Order")
-workorder_btn.setMinimumSize(300, 150)
+btn_layout = QVBoxLayout()
+btn_layout.setContentsMargins(150,0,150,0)
+workorder_btn = QPushButton("Select Work Order")
+workorder_btn.setEnabled(False)
+workorder_btn.setMinimumSize(100, 100)
 workorder_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-workorder_btn.setStyleSheet(button_style + """
+workorder_btn.setStyleSheet(button_style2(button_status=False))
+btn_shadow(workorder_btn)
+# workorder_btn.clicked.connect(lambda: handle_workorder(operation_combo, workorder_combo, window, work_order_activity))
+btn_layout.addWidget(workorder_btn, stretch=1)
+work_order_layout.addLayout(btn_layout)
+work_order_layout.addSpacing(200)
+
+
+
+# work_order_layout.addSpacing(500)
+main_layout.addWidget(work_order_widget)
+work_order_widget.hide()
+
+# Work Order exists MAIN
+default_widget = QWidget()
+default_layout = QVBoxLayout(default_widget)
+block = QFrame()
+block.setMinimumSize(250, 100)
+block.setStyleSheet("""
+    QFrame {
+        background-color: #1e1e1e;
+        border-radius: 15px;
+    }
+    QLabel {
+        font-size: 25px;
+        font-weight: bold;
+        color: white;
+    }
+""")
+# Create individual blocks
+work_layout = create_block(f"Work Order : {machine['workName']}", f"Code : {machine['WorkCode']}")
+part_layout = create_block(f"Part : {machine['part_name']}", f"Code : {machine['part_code']}")
+work_type_layout = create_block(f"Work Type : {machine['work_type_name']}")
+operation_layout = create_block(f"Operation : {machine['operation_name']}", f"Code : {machine['operation_sequence']}")
+
+# Arrange blocks in a grid-like layout
+block_layout = QVBoxLayout()
+block_layout.addLayout(work_layout)
+block_layout.addLayout(part_layout)
+block_layout.addLayout(operation_layout)
+block_layout.addLayout(work_type_layout)
+
+block.setLayout(block_layout)
+
+default_layout.addWidget(block)
+default_layout.addSpacing(35)
+
+# BUTTONS
+
+option_layout = QHBoxLayout()
+# option_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+option_layout.setSpacing(30) 
+
+button_style = """
+QPushButton {
+    color: white;
+    font-size: 30px;
+    font-weight: bold;
+    border-radius: 75px;
+    padding: 20px 40px;
+}
+QPushButton:hover {
+    opacity: 0.9;
+}
+QPushButton:pressed {
+    transform: scale(0.98);
+}
+"""
+
+# Work Order button
+workorder_btn2 = QPushButton("Close Work Order")
+workorder_btn2.setMinimumSize(300, 150)
+workorder_btn2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+workorder_btn2.setStyleSheet(button_style + """
     QPushButton {
         background-color: #FF9800;  /* Amber orange */
         border: 3px solid #E65100;
@@ -577,8 +438,9 @@ workorder_btn.setStyleSheet(button_style + """
     QPushButton:hover { background-color: #FB8C00; }
     QPushButton:pressed { background-color: #EF6C00; }
 """)
-btn_shadow(workorder_btn)
-option_layout.addWidget(workorder_btn, stretch=1)
+btn_shadow(workorder_btn2)
+option_layout.addWidget(workorder_btn2, stretch=1)
+
 
 # Down Time button
 downtime_btn = QPushButton("Down Time")
@@ -595,12 +457,13 @@ downtime_btn.setStyleSheet(button_style + """
 btn_shadow(downtime_btn)
 option_layout.addWidget(downtime_btn, stretch=1)
 
-main_layout.addLayout(option_layout)
+default_layout.addLayout(option_layout)
+default_layout.addSpacing(25)
 
-# ===================== PRODUCTION PROGRESS =====================
-
+# PRODUCTION PROGRESS
+progress_layout = QHBoxLayout()
 qty_layout = QVBoxLayout()
-qty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+qty_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
 # Title
 title = QLabel("Production Progress")
@@ -610,10 +473,12 @@ title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 # Progress Bar
 progress = QProgressBar()
 progress.setMinimum(0)
-progress.setMaximum(99999)
-progress.setValue(45445)
+progress.setMaximum(machine['totalQuantity'] if machine['totalQuantity'] else 0)
+progress.setValue(machine['quantityDone'] if machine['totalQuantityDone'] else 0)
+# progress.setMaximum(55555)
+# progress.setValue(55555)
 progress.setTextVisible(True)
-progress.setFormat("Quantity: %v / %m")
+progress.setFormat("Quantity : %v / %m")
 progress.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
 progress.setStyleSheet("""
@@ -637,14 +502,31 @@ progress.setStyleSheet("""
 qty_layout.addWidget(title)
 qty_layout.addSpacing(10)
 qty_layout.addWidget(progress)
-main_layout.addLayout(qty_layout)
+progress_layout.addLayout(qty_layout)
+progress_layout.addSpacing(20)
 
-# ===================== MACHINE PRI DATA =====================
+qty_layout2 = QVBoxLayout()
+qty_layout2.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+shift_production = QLabel(f"Shift_Quantity : 4578")
+shift_production.setStyleSheet("font-size: 20px; color: white; font-weight: bold;")
+remaining_productoin = QLabel(f"Pending_Quantity : {machine['totalQuantity']-machine['quantityDone']}")
+remaining_productoin.setStyleSheet("font-size: 20px; color: white; font-weight: bold;")
+qty_layout2.addWidget(shift_production)
+qty_layout2.addSpacing(10)
+qty_layout2.addWidget(remaining_productoin)
+progress_layout.addLayout(qty_layout2)
 
-status_layout = QHBoxLayout()
-status_layout.setSpacing(15)
-status_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+default_layout.addLayout(progress_layout)
+default_layout.addSpacing(25)
 
+# MACHINE PRIMARY DATA
+machine_layout = QHBoxLayout()
+machine_communication_layout = QVBoxLayout()
+machine_communication_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+machine_communication_layout.setSpacing(20)
+machine_status_layout = QHBoxLayout()
+machine_status_layout.setSpacing(15)
+machine_status_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 label = QLabel("Machine Status ")
 label.setStyleSheet("font-size: 25px; color: white; font-weight: bold;")
 colour =random.choice(["#00FF00", "#FFEB3B", "#FF0000"])
@@ -661,10 +543,14 @@ glow.setBlurRadius(40)
 glow.setColor(QColor(colour))
 glow.setOffset(0)
 status.setGraphicsEffect(glow)
-status_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignLeft)
-status_layout.addWidget(status, alignment=Qt.AlignmentFlag.AlignLeft)
-status_layout.addStretch(1)
-# duration block
+machine_status_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignLeft)
+machine_status_layout.addWidget(status, alignment=Qt.AlignmentFlag.AlignLeft)
+machine_status_layout.addStretch(1)
+last_communication = QLabel(f"Last Communication : {machine['last_communication']}")
+last_communication.setStyleSheet("font-size: 20px; color: white; font-weight: bold;")
+machine_communication_layout.addLayout(machine_status_layout)
+machine_communication_layout.addWidget(last_communication, alignment=Qt.AlignmentFlag.AlignLeft)
+machine_layout.addLayout(machine_communication_layout)
 duration_block = QFrame()
 duration_block.setMinimumSize(250, 100)
 duration_block.setStyleSheet("""
@@ -673,31 +559,42 @@ duration_block.setStyleSheet("""
         border-radius: 15px;
     }
     QLabel {
-        font-size: 25px;
+        font-size: 22px;
         font-weight: bold;
         color: white;
     }
 """)
 duration_layout = QVBoxLayout()
 duration_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-run = QLabel("Total Running : 4668454684")
-ideal = QLabel("Total Ideal : 874584156")
-downtime = QLabel("Total Downtime : 56464156485")
+run = QLabel(f"Total Running = {format_time(machine['pin1_duration'])}")
+ideal = QLabel(f"Total Ideal = {format_time(machine['pin2_duration'])}")
+downtime = QLabel(f"Total Downtime = {format_time(machine['downtime_duration'])}")
+offtime = QLabel(f"Total Offtime = {format_time(machine['pin3_duration'])}")
 duration_layout.addWidget(run)
 duration_layout.addWidget(ideal)
 duration_layout.addWidget(downtime)
+duration_layout.addWidget(offtime)
 duration_block.setLayout(duration_layout)
-status_layout.addWidget(duration_block)
-main_layout.addLayout(status_layout)
+machine_layout.addWidget(duration_block, alignment=Qt.AlignmentFlag.AlignVCenter)
+default_layout.addLayout(machine_layout)
 
-main_layout.addSpacing(10)
+default_layout.addSpacing(10)
+main_layout.addWidget(default_widget)
+default_widget.hide()
+
 main.setLayout(main_layout)
 stack.addWidget(home)
 stack.addWidget(main)
+if machine['EmployeeName']:
+    update_emp(work_start_time,emp_name, emp_code, stack, main)
+if work_order_activity:
+    default_widget.show()
+else:
+    work_order_widget.show()
 
 worker = Worker()
 worker.signal.connect(lambda states: print(states))
 worker.start()
 
-main_window.show()
+window.show()
 sys.exit(app.exec())
