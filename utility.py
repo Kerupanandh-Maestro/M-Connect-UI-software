@@ -1,6 +1,6 @@
 import time
 import random
-from PyQt6.QtWidgets import (QApplication, QGraphicsOpacityEffect,QGraphicsDropShadowEffect, QComboBox, QCompleter, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
+from PyQt6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGraphicsDropShadowEffect, QFrame, QComboBox, QCompleter, QVBoxLayout,QHBoxLayout,QFormLayout,QMessageBox, QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QLabel, QDialog, QLineEdit)
 from PyQt6.QtGui import QColor, QPixmap, QFont
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, Qt, QThread, pyqtSignal, QTimer
 import requests
@@ -10,9 +10,9 @@ from core import security
 from core.config import settings
 
 #Globals
-name = None
-code = None
-check_in = None
+# machine = {}
+workorder_id = None
+operation_id = None
 
 # Current directory
 cur_directory = os.path.dirname(__file__)
@@ -46,188 +46,70 @@ def date_time(date_time_label):
     current_date = datetime.now().strftime("%A %d-%m-%Y")
     current_time = datetime.now().strftime("%H : %M : %S")
     date_time_label.setText(f"{current_date}\n{current_time}") 
-        
-def handle_checkin(combo, window, stack, main, work_start_time, emp_name, emp_code):
-    global name, code, check_in
-    idx = combo.currentIndex()
+
+#Employee checkIn Handeling
+def handle_checkin(machine, stack, main, emp_combo, window):     
+    idx = emp_combo.currentIndex()
     if idx <= 0:
-        msg_box = QMessageBox(window)
-        msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        msg_box.setText("\nSelect Employee to Check In\n")
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-
-        # Dynamically size based on screen
-        screen = QApplication.primaryScreen().geometry()
-        screen_w, screen_h = screen.width(), screen.height()
-        msg_box.resize(int(screen_w * 0.4), int(screen_h * 0.2))
-
-        # Center on screen
-        x = (screen_w - msg_box.width()) // 2
-        y = (screen_h - msg_box.height()) // 2
-        msg_box.move(x, y)
-
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: #1E1E1E;
-                color: white;
-                border: 3px solid red;
-                border-radius: 15px;
-                font-size: 30px;
-                padding: 25px;
-            }
-
-            QLabel {
-                color: white;
-                font-size: 26px;
-            }
-
-            QPushButton {
-                background-color: #00bcd4;
-                color: white;
-                font-size: 22px;
-                font-weight: bold;
-                border-radius: 10px;
-                padding: 15px 45px;
-                border: 2px solid #00bcd4;
-            }
-
-            QPushButton:hover {
-                background-color: #0097a7;
-            }
-
-            QPushButton:pressed {
-                background-color: #006064;
-            }
-        """)
-
-        opacity_effect = QGraphicsOpacityEffect()
-        msg_box.setGraphicsEffect(opacity_effect)
-
-        fade_anim = QPropertyAnimation(opacity_effect, b"opacity")
-        fade_anim.setDuration(250)
-        fade_anim.setStartValue(0)
-        fade_anim.setEndValue(1)
-        fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-        msg_box.setWindowOpacity(0)
-        msg_box.show()
-        msg_box.resize(
-            int(msg_box.width() * 0.95),
-            int(msg_box.height() * 0.95)
-        )
-        fade_anim.start()
-
-        for step in range(1, 6):
-            msg_box.resize(
-            int(msg_box.width() * 1.02),
-            int(msg_box.height() * 1.02)
-        )
-            msg_box.setWindowOpacity(step / 5)
-            QApplication.processEvents()
-            QThread.msleep(25)
-
-        msg_box.exec()
+        show_warning(window, "\n⚠️  Select Employee to Check In")
         return
-
-    name = combo.currentText().split(" [")[0]
-    code = combo.currentData()
-    workstart_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    work_start_time.setText(f"Check In : {workstart_time}")
-    emp_name.setText(f"Employee : {name}")
-    emp_code.setText(f"Employee Code : {code}")
+    employee_code = emp_combo.currentData()
+    check_in(employee_code, machine['machineId'])
     stack.setCurrentWidget(main)
     return
 
-def handle_workorder(combo, window, work_order_activity):
-    idx = combo.currentIndex()
-    if idx <= 0:
-        msg_box = QMessageBox(window)
-        msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        msg_box.setText("\nWork Order Not Selected. Select Your Work Order\n")
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+def check_in(employee_code, machine_id):
+    CheckIn = "https://mconnect.themaestro.in/client_mconnect/employee_action/employeeCheckin_checkout"
+    device_code = settings.DEVICE_CODE
+    auth_code = security.check_authcode(device_code)
+    print(auth_code, device_code)
+    payload = {
+        "auth_code": auth_code,
+        "device_code": device_code,
+        "machine_id": machine_id,
+        "employee_code": employee_code,
+        "actionStatus": 1,
+        }
+    try:
+        res = requests.post(CheckIn, data=payload, headers={"accept": "application/json"}, timeout=5)
+        result = res.json()
+        print("\nCheckIn result\n", result)
+        if result['status'] == 1:
+            print("\nCheckIn Successfull\n")
+        else:
+            print(f"\nFailed to CheckIn. Status code: {result['status']} Message: {result['msg']}\n")
+    except Exception as e:
+        print("\nError Checking In: ", e)   
 
-        # Dynamically size based on screen
-        screen = QApplication.primaryScreen().geometry()
-        screen_w, screen_h = screen.width(), screen.height()
-        msg_box.resize(int(screen_w * 0.4), int(screen_h * 0.2))
-
-        # Center on screen
-        x = (screen_w - msg_box.width()) // 2
-        y = (screen_h - msg_box.height()) // 2
-        msg_box.move(x, y)
-
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: #1E1E1E;
-                color: white;
-                border: 3px solid red;
-                border-radius: 15px;
-                font-size: 30px;
-                padding: 25px;
-            }
-
-            QLabel {
-                color: white;
-                font-size: 26px;
-            }
-
-            QPushButton {
-                background-color: #00bcd4;
-                color: white;
-                font-size: 22px;
-                font-weight: bold;
-                border-radius: 10px;
-                padding: 15px 45px;
-                border: 2px solid #00bcd4;
-            }
-
-            QPushButton:hover {
-                background-color: #0097a7;
-            }
-
-            QPushButton:pressed {
-                background-color: #006064;
-            }
-        """)
-
-        opacity_effect = QGraphicsOpacityEffect()
-        msg_box.setGraphicsEffect(opacity_effect)
-
-        fade_anim = QPropertyAnimation(opacity_effect, b"opacity")
-        fade_anim.setDuration(250)
-        fade_anim.setStartValue(0)
-        fade_anim.setEndValue(1)
-        fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-        msg_box.setWindowOpacity(0)
-        msg_box.show()
-        msg_box.resize(
-            int(msg_box.width() * 0.95),
-            int(msg_box.height() * 0.95)
-        )
-        fade_anim.start()
-
-        for step in range(1, 6):
-            msg_box.resize(
-            int(msg_box.width() * 1.02),
-            int(msg_box.height() * 1.02)
-        )
-            msg_box.setWindowOpacity(step / 5)
-            QApplication.processEvents()
-            QThread.msleep(25)
-
-        msg_box.exec()
-        return
-    else:
-        work_order_activity = True
-        return work_order_activity
-#Update Employee
-def update_emp(work_start_time,emp_name, emp_code, stack, main):
-    work_start_time.setText(f"Check In : {machine['work_start_duration']}")
-    emp_name.setText(f"Employee : {machine['EmployeeName']}")
-    emp_code.setText(f"Employee Code : {machine['EmployeeCode']}")
-    stack.setCurrentWidget(main)
-    return
+def select_workorder(machine, default_widget, work_order_widget):
+    work_order_widget.hide()
+    default_widget.show()
+    workorder = "https://mconnect.themaestro.in/client_mconnect/employee_action/workorder_entry_multi"
+    device_code = settings.DEVICE_CODE
+    auth_code = security.check_authcode(device_code)
+    print(auth_code, device_code)
+    payload = {
+        "auth_code": auth_code,
+        "device_code": device_code, 
+        "machine_id": machine['machineId'],
+        "workId": workorder_id,
+        "empId": machine['EmployeeId'],
+        "action_status": 1,  
+        "operation_id": operation_id,
+    }
+    try:
+        res = requests.post(workorder, data=payload, headers={"accept": "application/json"}, timeout=5)
+        result = res.json()
+        print("\nWorkorder result\n", result)
+        if result['status'] == 1:
+            workorder = result.get("data", {})
+            print("\nWorkOrder Selected Successfully\n")
+            work_order_widget.hide()
+            default_widget.show()
+        else:
+            print(f"\nFailed to select workorder. Status code: {result['status']} Message: {result['msg']}\n")
+    except Exception as e:
+        print("\nError Selecting WorkOrder :", e)
         
 # CheckOut Navigation 
 class ClickableIcon(QLabel):
@@ -242,15 +124,12 @@ class ClickableIcon(QLabel):
         if event.button() == Qt.MouseButton.LeftButton and self.callback:
             self.callback()
 
-machine = None
 # machine_details
 def get_machine():
-    global machine
     device_code = settings.DEVICE_CODE
     auth_code = security.check_authcode(device_code)
     machine_url = "https://mconnect.themaestro.in/client_mconnect/masters/device-get-details"
     # url = "http://192.168.4.48:8001/masters/device-get-details"
-    # print(auth_code)
     payload = {
         "authcode": auth_code,
         "device_code": device_code       
@@ -258,13 +137,12 @@ def get_machine():
 
     try:
         res = requests.post(machine_url, data=payload, headers={"accept": "application/json"}, timeout=5)
-        print("machine res ", res)
         result = res.json()
         print("\nmachine result\n", result)
         if result['status'] == 1:
-            machine = result.get("data", {})
-            print("machine\n", machine)
-            return machine
+            mac = result.get("data", {})
+            print("machine data\n", mac)
+            return mac
         else:
             print(f"Failed to fetch machine. Status code: {result['status']} Message: {result['msg']}")
             return {'error':result['msg']}
@@ -273,11 +151,11 @@ def get_machine():
         return {'error':e}
     
 def check_machine(parent):
-    machine = get_machine()
-    while machine.get('error'):
-        show_warning(parent, f"Error Loading Machine. {machine['error']}")
-        machine = get_machine()
-    return machine
+    mac = get_machine()
+    while mac.get('error'):
+        show_warning(parent, f"\n⚠️  Error Loading Machine. {mac['error']}\n\n")
+        mac = get_machine()
+    return mac
 
 def get_work_order():
     workorder_url = "https://mconnect.themaestro.in/client_mconnect/dropdown/workorder_dropdown_app"
@@ -304,7 +182,7 @@ def get_work_order():
         print("Error loading workorder:", e)
         return None
     
-def checkout_quantity_box(combo, stack, home, window):
+def checkout_quantity_box(machine, combo, stack, home, window ):
     dialog = QuantityDialog(window)
     if dialog.exec():
         prod_qty, rej_qty = dialog.get_values()
@@ -316,29 +194,110 @@ def checkout_quantity_box(combo, stack, home, window):
         checkin_time = None
         stack.setCurrentWidget(home)
 
-def workorder_quantity_box(window):
+        checkout = "https://mconnect.themaestro.in/client_mconnect/employee_action/employeeCheckin_checkout"
+        device_code = settings.DEVICE_CODE
+        auth_code = security.check_authcode(device_code)
+        print(auth_code, device_code)
+        payload = {
+            "auth_code": auth_code,
+            "device_code": device_code,
+            "machine_id": machine['machineId'],
+            "employee_code": machine['EmployeeCode'],
+            "actionStatus": 2,
+            "rejected_qty": rej_qty,
+            "production_qty": prod_qty
+            }
+        print(payload)
+        try:
+            res = requests.post(checkout, data=payload, headers={"accept": "application/json"}, timeout=5)
+            result = res.json()
+            print("\nCheckout result\n", result)
+            if result['status'] == 1:
+                print("Checkout Successfull")
+            else:
+                print(f"Failed to CheckOut. Status code: {result['status']} Message: {result['msg']}")
+        except Exception as e:
+            print("Error in Checking Out:", e)
+
+def workorder_quantity_box(machine, window, default_widget, work_order_widget):
     dialog = QuantityDialog(window)
     if dialog.exec():
         prod_qty, rej_qty = dialog.get_values()
         print("Production Qty:", prod_qty)
         print("Rejected Qty:", rej_qty)
-
+        default_widget.hide()
+        work_order_widget.show()
+        workorder = "https://mconnect.themaestro.in/client_mconnect/employee_action/workorder_entry_multi"
+        device_code = settings.DEVICE_CODE
+        auth_code = security.check_authcode(device_code)
+        print(auth_code, device_code)
+        payload = {
+            "auth_code": auth_code,
+            "device_code": device_code, 
+            "machine_id": machine['machineId'],
+            "workId": machine['workId'],
+            "empId": machine['EmployeeId'],
+            "action_status": 2,  
+            "qty": machine['totalQuantity'],
+            "operation_id": machine['operation_id'],
+            "qty_completed": prod_qty,
+            "rejected_qty": rej_qty,
+            "close_state": 1
+        }
+        try:
+            res = requests.post(workorder, data=payload, headers={"accept": "application/json"}, timeout=5)
+            result = res.json()
+            print("\nworkorder result\n", result)
+            if result['status'] == 1:
+                workorder = result.get("data", {}).get("items", [])
+                print("\nWorkOrder Closed Successfully\n")
+                default_widget.hide()
+                work_order_widget.show()
+            else:
+                print(f"\nFailed to close workorder. Status code: {result['status']} Message: {result['msg']}\n")
+        except Exception as e:
+            print("\nError Closing WorkOrder :", e)
 class QuantityDialog(QDialog):
-    def __init__(self, window):
-        super().__init__()
-        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
+        # -------- Window Setup (Frameless) --------
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.Dialog
+        )
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setMinimumSize(500, 350)
+
+        # -------- Main Frame with Shadow --------
+        frame = QFrame()
+        frame.setStyleSheet("background-color: #1e1e1e; border-radius: 15px;")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(25)
+        shadow.setColor(QColor(0, 0, 0, 150))
+        shadow.setOffset(0, 0)
+        frame.setGraphicsEffect(shadow)
+
+        # -------- Layouts --------
         layout = QVBoxLayout()
+        layout.setSpacing(20)
+        frame_layout = QVBoxLayout()
+        frame_layout.addLayout(layout)
+        frame.setLayout(frame_layout)
 
-        # Form layout for inputs
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(frame)
+        self.setLayout(main_layout)
+
+        # -------- Form Inputs --------
         form_layout = QFormLayout()
-        form_layout.setSpacing(40)
+        form_layout.setSpacing(30)
 
         self.prod_input = QLineEdit()
-        self.rej_input = QLineEdit()
+        self.rej_input = QLineEdit("0")
 
         for line_edit in [self.prod_input, self.rej_input]:
-            line_edit.setFixedHeight(60) 
+            line_edit.setFixedHeight(60)
             line_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             line_edit.setFont(QFont("Arial", 22))
             line_edit.setStyleSheet("""
@@ -347,6 +306,7 @@ class QuantityDialog(QDialog):
                     border-radius: 15px;
                     padding: 10px;
                     background-color: white;
+                    color: black;
                 }
                 QLineEdit:focus {
                     border: 3px solid #1565C0;
@@ -360,24 +320,22 @@ class QuantityDialog(QDialog):
         rej_label = QLabel("Rejected Quantity :")
         rej_label.setStyleSheet("font-size: 26px; color: white;")
         form_layout.addRow(rej_label, self.rej_input)
-        layout.addSpacing(25)
-        layout.addLayout(form_layout)
-        layout.addSpacing(25)
-        layout.addStretch(1)
 
-        # Buttons
+        layout.addLayout(form_layout)
+
+        # -------- Buttons --------
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(25)
         ok_btn = QPushButton("OK")
         cancel_btn = QPushButton("Cancel")
         for btn in [ok_btn, cancel_btn]:
-            btn.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-            btn.setMinimumSize(200, 80)
+            btn.setFont(QFont("Arial", 20))
+            btn.setMinimumSize(150, 90)
 
         ok_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1E88E5;
-                border-radius: 10px;
+                border-radius: 30px;
                 color: white;
             }
             QPushButton:hover { background-color: #1565C0; }
@@ -386,40 +344,48 @@ class QuantityDialog(QDialog):
         cancel_btn.setStyleSheet("""
             QPushButton {
                 background-color: #F44336;
-                border-radius: 10px;
+                border-radius: 30px;
                 color: white;
             }
             QPushButton:hover { background-color: #D32F2F; }
             QPushButton:pressed { background-color: #B71C1C; }
         """)
 
-        ok_btn.clicked.connect(lambda:self.validate_inputs(window))
+        ok_btn.clicked.connect(self.validate_inputs)
         cancel_btn.clicked.connect(self.reject)
 
         btn_layout.addWidget(ok_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
-        layout.addSpacing(20)
 
-        self.setLayout(layout)
         self.result_values = None
 
-        # Shadow for dialog
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(25)
-        shadow.setXOffset(0)
-        shadow.setYOffset(0)
-        shadow.setColor(QColor(0, 0, 0, 150))
-        self.setGraphicsEffect(shadow)
+        # -------- Center over parent --------
+        self.center_over_parent(parent)
 
-    def validate_inputs(self, window):
+    def center_over_parent(self, parent):
+        if parent is not None:
+            parent_rect = parent.frameGeometry()
+            parent_center = parent_rect.center()
+            self_rect = self.frameGeometry()
+            self_rect.moveCenter(parent_center)
+            self.move(self_rect.topLeft())
+        else:
+            # Center on screen if no parent
+            screen = self.screen().availableGeometry()
+            self.move(
+                (screen.width() - self.width()) // 2,
+                (screen.height() - self.height()) // 2
+            )
+
+    def validate_inputs(self):
         prod = self.prod_input.text().strip()
         rej = self.rej_input.text().strip()
         if not prod or not rej:
-            show_warning(window, "Missing Input, Both fields are required!")
+            show_warning(self.parentWidget(), f"\n⚠️  Missing Input. Both fields are required!\n")
             return
         if not prod.isdigit() or not rej.isdigit():
-            show_warning(window, "Invalid Input, Enter numeric values only!")
+            show_warning(self.parentWidget(), f"\n⚠️  Invalid Input. Enter numeric values only!\n")
             return
         self.result_values = (int(prod), int(rej))
         self.accept()
@@ -430,87 +396,67 @@ class QuantityDialog(QDialog):
 # Warning DialogBox
 def show_warning(parent, message):
     msg_box = QMessageBox(parent)
-    msg_box.setWindowTitle("⚠ Warning")
-    msg_box.setText(f"⚠️  {message}")
+    msg_box.setText(message)
     msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-    msg_box.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+    msg_box.setFont(QFont("Segoe UI", 20))
     msg_box.setIcon(QMessageBox.Icon.NoIcon)
     msg_box.setStandardButtons(QMessageBox.StandardButton.NoButton)
+    msg_box.setMinimumSize(150, 150)
 
+    # Add OK button
     ok_btn = msg_box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
-    ok_btn.setShortcut(Qt.Key.Key_unknown)
+    ok_btn.setFont(QFont("Segoe UI", 30, QFont.Weight.Bold))
+    ok_btn.setMinimumSize(300, 100)
 
-    # --- Blue color scheme ---
     msg_box.setStyleSheet("""
         QMessageBox {
-            background-color: #1E1E2F;        /* dark navy background */
-            border: 3px solid #2979FF;        /* bright blue border */
-            border-radius: 20px;
-            padding: 25px;
+            background-color: #1E1E2F;
+            border-radius: 25px;
+            padding: 35px;
         }
-
         QLabel {
             color: #FFFFFF;
-            font-size: 26px;
+            font-size: 30px;   
             font-weight: bold;
-            padding: 10px;
+            padding: 20px;
             background: transparent;
         }
-
         QPushButton {
             background-color: #2979FF;
             color: white;
-            font-size: 22px;
+            font-size: 35px;  
             font-weight: bold;
-            border-radius: 10px;
-            padding: 12px 40px;
+            border-radius: 15px;
+            padding: 20px 60px;
             border: none;
-            text-decoration: none;
         }
-
-        QPushButton:hover {
-            background-color: #448AFF;
-        }
-
-        QPushButton:pressed {
-            background-color: #1565C0;
-        }
-
-        QPushButton:focus {
-            outline: none;
-            border: none;
-            text-decoration: none;
-        }
+        QPushButton:hover { background-color: #448AFF; }
+        QPushButton:pressed { background-color: #1565C0; }
     """)
 
-    # --- Blue Glow Shadow ---
+    # Shadow effect
     shadow = QGraphicsDropShadowEffect()
     shadow.setBlurRadius(50)
-    shadow.setColor(QColor(68, 138, 255, 180))  # same hue as button hover
+    shadow.setColor(QColor(68, 138, 255, 180))
     shadow.setOffset(0, 0)
     msg_box.setGraphicsEffect(shadow)
 
-    # --- Fade-in Animation ---
-    opacity_effect = QGraphicsOpacityEffect()
-    msg_box.setGraphicsEffect(opacity_effect)
-    anim = QPropertyAnimation(opacity_effect, b"opacity")
-    anim.setDuration(400)
-    anim.setStartValue(0)
-    anim.setEndValue(1)
-    anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-    QTimer.singleShot(0, anim.start)
-
-    # --- Center on parent ---
+    # Center the dialog over parent
     if parent:
-        geo = parent.geometry()
+        parent_rect = parent.frameGeometry()
+        msg_box_rect = msg_box.frameGeometry()
         msg_box.move(
-            geo.center().x() - msg_box.width() // 2,
-            geo.center().y() - msg_box.height() // 2
+            parent_rect.center().x() - msg_box_rect.width() // 2,
+            parent_rect.center().y() - msg_box_rect.height() // 2
+        )
+    else:
+        screen = msg_box.screen().availableGeometry()
+        msg_box.move(
+            (screen.width() - msg_box.width()) // 2,
+            (screen.height() - msg_box.height()) // 2
         )
 
     msg_box.exec()
-
-
 
 def create_block(element1, element2 = None):
     layout = QHBoxLayout()
@@ -520,14 +466,6 @@ def create_block(element1, element2 = None):
     layout.addWidget(name_label)
     layout.addWidget(code_label)
     return layout
-
-def check_in(stack, main):
-    dialog = CheckInDialog(machine)
-    if dialog.exec():
-        emp = dialog.get_selected_employee()
-        if emp:
-            print(f'Employee Name: {emp["name"]}, Employee Code: {emp["code"]}, CheckIN: {emp["check_in"]}')
-            stack.setCurrentWidget(main)
 
 # Check IN DialogBox
 class CheckInDialog(QDialog):
@@ -639,55 +577,54 @@ def format_time(total_seconds):
     formatted_time = f"{hours:02d}:{minutes:02d}"
     return(formatted_time)
 
-def update_operation(workorder_btn, operation_combo, workorder_combo, operation_label):
-    operation_label.hide()
-    operation_combo.hide()
-    selected_workorder_id = workorder_combo.currentData()
+def update_operation(workorder_btn, operation_combo, workorder_combo, operation_label, machine_id):
+    global workorder_id
+    workorder_id = workorder_combo.currentData()
     operation_combo.blockSignals(True)
     operation_combo.clear()
     operation_combo.addItem(None, None)
     operation_combo.blockSignals(False)
-    operations = get_operation(selected_workorder_id)
+    operations = get_operation(workorder_id, machine_id)
     if operations:
         for operation in operations:
             operation_label.show()
             operation_combo.show()
             display_text = f"{operation['name']}"
-            operation_combo.addItem(display_text)
+            operation_combo.addItem(display_text, operation['id'])
     operation_combo.currentIndexChanged.connect(lambda:on_operation_selected(operation_combo, workorder_btn))
 def on_operation_selected(operation_combo, workorder_btn):
+    global operation_id
     if operation_combo.currentIndex()>0:
+        operation_id = operation_combo.currentData()
         workorder_btn.setEnabled(True)
         workorder_btn.setStyleSheet(button_style2(button_status=True))
     else:
-        button_style2(button_status=False)
         workorder_btn.setStyleSheet(button_style2(button_status=False))
     
-def get_operation(workorder_id):
+def get_operation(workorder_id, machine_id):
     operation_url = "https://mconnect.themaestro.in/client_mconnect/dropdown/dropdown-operation-machine-mapping"
     device_code = settings.DEVICE_CODE
     auth_code = security.check_authcode(device_code)
-    print(auth_code, device_code, workorder_id, machine['machineId'])
+    print(auth_code, device_code, workorder_id, machine_id)
     payload = {
         "auth_code": auth_code,
         "device_code": device_code,
         "work_order_id": workorder_id,
-        "machine_id": machine['machineId']      
+        "machine_id": machine_id     
     }
     try:
         res = requests.post(operation_url, data=payload, headers={"accept": "application/json"}, timeout=5)
-        print("operation res", res)
         result = res.json()
-        print("\noperation result\n", result)
+        print("\nOperation result\n", result)
         if result['status'] == 1:
             operation = result.get("data", {})
-            print("operation\n", operation)
+            print("\nOperation\n", operation)
             return operation
         else:
-            print(f"Failed to fetch operation. Status code: {result['status']} Message: {result['msg']}")
+            print(f"\nFailed to fetch operation. Status code: {result['status']} Message: {result['msg']}\n")
             return None
     except Exception as e:
-        print("Error loading operation:", e)
+        print("\nError loading operation:", e)
         return None
     
 def button_style2(button_status):
@@ -719,3 +656,27 @@ def button_style2(button_status):
             background-color: #1565C0;
         }
         """
+def get_employee_list():
+    dropdown_employee = "https://mconnect.themaestro.in/client_mconnect/dropdown/dropDownEmployeeApp"
+    device_code = settings.DEVICE_CODE
+    auth_code = security.check_authcode(device_code)
+    print(auth_code, device_code)
+    payload = {
+        "auth_code": auth_code,
+        "device_code": device_code,   
+    }
+    try:
+        res = requests.post(dropdown_employee, data=payload, headers={"accept": "application/json"}, timeout=5)
+        print("dropdown_employee res", res)
+        result = res.json()
+        print("\ndropdown_employee result\n", result)
+        if result['status'] == 1:
+            dropdown_employee = result.get("data", {}).get("items", [])
+            print("dropdown_employee\n", dropdown_employee)
+            return dropdown_employee
+        else:
+            print(f"Failed to fetch dropdown_employee. Status code: {result['status']} Message: {result['msg']}")
+            return None
+    except Exception as e:
+        print("Error loading dropdown_employee:", e)
+        return None
